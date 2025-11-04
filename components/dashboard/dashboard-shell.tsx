@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { format } from "date-fns";
+import { useShallow } from "zustand/react/shallow";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Button } from "@/components/ui/button";
@@ -28,13 +29,15 @@ export function DashboardShell({ displayName }: DashboardShellProps) {
     error,
     fetchExpenses,
     lastSyncedAt,
-  } = useExpenseStore((state) => ({
-    expenses: state.expenses,
-    isLoading: state.isLoading,
-    error: state.error,
-    fetchExpenses: state.fetchExpenses,
-    lastSyncedAt: state.lastSyncedAt,
-  }));
+  } = useExpenseStore(
+    useShallow((state) => ({
+      expenses: state.expenses,
+      isLoading: state.isLoading,
+      error: state.error,
+      fetchExpenses: state.fetchExpenses,
+      lastSyncedAt: state.lastSyncedAt,
+    })),
+  );
 
   useEffect(() => {
     void fetchExpenses();

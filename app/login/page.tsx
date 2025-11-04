@@ -17,7 +17,7 @@ export default async function LoginPage() {
   const session = await getServerSession(authOptions);
 
   if (session?.user) {
-    redirect("/dashboard");
+    redirect(session.user.onboarded ? "/dashboard" : "/onboarding");
   }
 
   return (

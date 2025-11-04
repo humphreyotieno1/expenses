@@ -44,6 +44,7 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
+          onboarded: user.onboarded,
         };
       },
     }),
@@ -54,11 +55,38 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.sub;
       }
 
+      if (session.user && typeof token.onboarded !== "undefined") {
+        session.user.onboarded = Boolean(token.onboarded);
+      }
+
+      if (session.user && typeof token.name === "string") {
+        session.user.name = token.name;
+      }
+
       return session;
     },
-    jwt: async ({ token, user }) => {
+    jwt: async ({ token, user, trigger, session }) => {
       if (user) {
         token.sub = user.id;
+        token.name = user.name ?? token.name;
+        token.onboarded = (user as { onboarded?: boolean }).onboarded ?? false;
+      } else if (trigger === "update" && session?.user) {
+        if (typeof session.user.name !== "undefined") {
+          token.name = session.user.name ?? null;
+        }
+        if (typeof session.user.onboarded !== "undefined") {
+          token.onboarded = session.user.onboarded;
+        }
+      } else if (token.sub && typeof token.onboarded === "undefined") {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { onboarded: true, name: true },
+        });
+
+        if (dbUser) {
+          token.onboarded = dbUser.onboarded;
+          token.name = dbUser.name ?? token.name;
+        }
       }
 
       return token;

@@ -1,21 +1,50 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
 
-export default function RegisterPage() {
+import { SignUpForm } from "@/components/auth/sign-up-form";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { authOptions } from "@/lib/auth";
+
+export default async function RegisterPage() {
+  const session = await getServerSession(authOptions);
+
+  if (session?.user) {
+    redirect(session.user.onboarded ? "/dashboard" : "/onboarding");
+  }
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 px-4 py-12 text-center">
-      <div className="max-w-md space-y-6">
-        <h1 className="text-3xl font-semibold tracking-tight">Create an account</h1>
-        <p className="text-sm text-muted-foreground">
-          Account creation and onboarding flows are coming soon. In the meantime,
-          reach out to the project maintainer to request access.
-        </p>
-        <Link
-          href="/login"
-          className="inline-flex items-center justify-center rounded-md border bg-background px-4 py-2 text-sm font-semibold shadow-sm transition-colors hover:bg-muted"
-        >
-          Back to sign in
-        </Link>
-      </div>
+    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-12">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold">Create your account</CardTitle>
+          <CardDescription>
+            Start tracking your spending in minutes. All we need is an email and a password.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <SignUpForm />
+          <div className="space-y-4 text-center text-sm text-muted-foreground">
+            <Separator />
+            <p>
+              Already have an account?{" "}
+              <Link
+                href="/login"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

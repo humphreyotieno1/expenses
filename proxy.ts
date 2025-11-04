@@ -5,6 +5,11 @@ const proxy = nextAuthMiddleware;
 export default proxy;
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/expenses/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/onboarding/:path*",
+    "/api/expenses/:path*",
+    "/api/users/:path*",
+  ],
 };
 
