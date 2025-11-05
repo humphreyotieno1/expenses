@@ -1,125 +1,261 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
+import { CalendarIcon, Filter, RefreshCw, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
+import { useRouter } from "next/navigation";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CategoryBreakdownChart } from "@/components/dashboard/category-breakdown-chart";
+import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import {
+  useExpenseStore,
+  type Expense,
+  type ExpenseFilters,
+} from "@/store/expense-store";
+import { type TransactionType } from "@/lib/validators/expense";
 import { ExpenseTrendChart } from "@/components/dashboard/expense-trend-chart";
-import { useExpenseStore } from "@/store/expense-store";
+import { CategoryBreakdownChart } from "@/components/dashboard/category-breakdown-chart";
+import { TransactionDialog } from "@/components/dashboard/transaction-dialog";
+import { TransactionsTable } from "@/components/dashboard/transactions-table";
+import { DeleteExpenseDialog } from "@/components/dashboard/delete-expense-dialog";
+import type { DateRange } from "react-day-picker";
+import { formatCurrencyValue, supportedCurrencies, type SupportedCurrency } from "@/lib/currency";
+
+const typeOptions: Array<{ label: string; value: TransactionType | "ALL" }> = [
+  { label: "All types", value: "ALL" },
+  { label: "Income", value: "INCOME" },
+  { label: "Expense", value: "EXPENSE" },
+];
 
 type DashboardShellProps = {
   displayName: string;
+  currency: SupportedCurrency;
 };
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-});
-
-export function DashboardShell({ displayName }: DashboardShellProps) {
+export function DashboardShell({ displayName, currency }: DashboardShellProps) {
+  const router = useRouter();
   const {
     expenses,
+    recent,
+    summary,
+    trend,
+    categoryBreakdown,
+    totalCount,
+    page,
+    pageSize,
     isLoading,
     error,
-    fetchExpenses,
+    filters,
     lastSyncedAt,
+    setFilters,
+    resetFilters,
+    setPage,
+    setPageSize,
+    fetchExpenses,
   } = useExpenseStore(
     useShallow((state) => ({
       expenses: state.expenses,
+      recent: state.recent,
+      summary: state.summary,
+      trend: state.trend,
+      categoryBreakdown: state.categoryBreakdown,
+      totalCount: state.totalCount,
+      page: state.page,
+      pageSize: state.pageSize,
       isLoading: state.isLoading,
       error: state.error,
-      fetchExpenses: state.fetchExpenses,
+      filters: state.filters,
       lastSyncedAt: state.lastSyncedAt,
+      setFilters: state.setFilters,
+      resetFilters: state.resetFilters,
+      setPage: state.setPage,
+      setPageSize: state.setPageSize,
+      fetchExpenses: state.fetchExpenses,
     })),
   );
+
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<SupportedCurrency>(currency);
+  const [isUpdatingCurrency, setIsUpdatingCurrency] = useState(false);
+
+  const initialRange: DateRange | undefined = filters.from || filters.to
+    ? {
+        from: filters.from ? new Date(filters.from) : undefined,
+        to: filters.to ? new Date(filters.to) : undefined,
+      }
+    : undefined;
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(initialRange);
 
   useEffect(() => {
     void fetchExpenses();
   }, [fetchExpenses]);
 
-  const formatCurrency = (value: number) => currencyFormatter.format(value);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  const { totalIncome, totalExpenses, netBalance } = useMemo(() => {
-    return expenses.reduce(
-      (acc, expense) => {
-        if (expense.type === "INCOME") {
-          acc.totalIncome += expense.amount;
-        } else {
-          acc.totalExpenses += expense.amount;
-        }
-        acc.netBalance = acc.totalIncome - acc.totalExpenses;
-        return acc;
-      },
-      { totalIncome: 0, totalExpenses: 0, netBalance: 0 },
-    );
-  }, [expenses]);
+  const categories = useMemo(() => categoryBreakdown.map((slice) => slice.name), [categoryBreakdown]);
 
-  const monthlyTrendData = useMemo(() => {
-    const grouped = new Map<string, { label: string; income: number; expense: number }>();
+  const formatAmount = useMemo(
+    () => (amount: number, type: TransactionType) => {
+      const formatted = formatCurrencyValue(Math.abs(amount), selectedCurrency);
+      return type === "EXPENSE" ? `-${formatted}` : `+${formatted}`;
+    },
+    [selectedCurrency],
+  );
 
-    expenses.forEach((expense) => {
-      const parsedDate = new Date(expense.date);
-      if (Number.isNaN(parsedDate.valueOf())) {
+  const formatSummaryValue = useMemo(
+    () => (value: number) => {
+      const formatted = formatCurrencyValue(Math.abs(value), selectedCurrency);
+      return value < 0 ? `-${formatted}` : formatted;
+    },
+    [selectedCurrency],
+  );
+
+  const handleFilterChange = async (partial: Partial<ExpenseFilters>) => {
+    await setFilters(partial);
+  };
+
+  const handleDateRangeChange = async (range?: DateRange) => {
+    setDateRange(range);
+    await setFilters({
+      from: range?.from ? range.from.toISOString() : undefined,
+      to: range?.to ? range.to.toISOString() : undefined,
+    });
+  };
+
+  const handleExport = async () => {
+    const params = new URLSearchParams();
+    if (filters.category) params.set("category", filters.category);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
+    if (filters.search) params.set("search", filters.search);
+    params.set("page", "1");
+    params.set("pageSize", Math.max(totalCount, pageSize).toString());
+
+    try {
+      const response = await fetch(`/api/expenses?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = await response.json();
+      const rows: Expense[] = payload?.data ?? [];
+
+      if (!rows.length) {
+        toast.info("No transactions to export yet");
         return;
       }
 
-      const key = format(parsedDate, "yyyy-MM");
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          label: format(parsedDate, "MMM yyyy"),
-          income: 0,
-          expense: 0,
-        });
+      const headers = ["Date", "Title", "Category", "Type", "Amount", "Notes"];
+      const csvRows = rows.map((expense: Expense) => [
+        format(new Date(expense.date), "yyyy-MM-dd"),
+        expense.title,
+        expense.category,
+        expense.type,
+        expense.amount.toFixed(2),
+        expense.notes ?? "",
+      ]);
+
+      const csv = [headers, ...csvRows]
+        .map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `expenses-${format(new Date(), "yyyyMMdd-HHmm")}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("Export started", {
+        description: "A CSV containing your current filters is downloading.",
+      });
+    } catch (error) {
+      console.error("[Dashboard][export]", error);
+      toast.error("Export failed", { description: "Unable to generate the CSV right now." });
+    }
+  };
+
+  const handleCurrencyChange = async (value: SupportedCurrency) => {
+    if (value === selectedCurrency) return;
+    setIsUpdatingCurrency(true);
+    try {
+      const response = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currency: value }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
       }
 
-      const entry = grouped.get(key)!;
-      if (expense.type === "INCOME") {
-        entry.income += expense.amount;
-      } else {
-        entry.expense += expense.amount;
-      }
-    });
+      setSelectedCurrency(value);
+      toast.success("Currency updated", {
+        description: `Amounts are now shown in ${value}.`,
+      });
+      router.refresh();
+    } catch (error) {
+      console.error("[Dashboard][currency]", error);
+      toast.error("Could not update currency. Please try again.");
+    } finally {
+      setIsUpdatingCurrency(false);
+    }
+  };
 
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([, value]) => value);
-  }, [expenses]);
+  const openCreate = () => {
+    setEditingExpense(null);
+    setIsDialogOpen(true);
+  };
 
-  const categoryBreakdown = useMemo(() => {
-    const totals = new Map<string, number>();
+  const openEdit = (expense: Expense) => {
+    setEditingExpense(expense);
+    setIsDialogOpen(true);
+  };
 
-    expenses.forEach((expense) => {
-      if (expense.type !== "EXPENSE") {
-        return;
-      }
+  const openDelete = (expense: Expense) => {
+    setDeleteExpense(expense);
+    setIsDeleteOpen(true);
+  };
 
-      const category = expense.category?.trim() || "Uncategorized";
-      totals.set(category, (totals.get(category) ?? 0) + expense.amount);
-    });
-
-    return Array.from(totals.entries())
-      .sort(([, valueA], [, valueB]) => valueB - valueA)
-      .slice(0, 8)
-      .map(([name, value]) => ({ name, value }));
-  }, [expenses]);
-
-  const recentTransactions = useMemo(() => {
-    return [...expenses]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
-  }, [expenses]);
+  const activeType = filters.type ?? "ALL";
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-medium text-muted-foreground">
               Welcome back, {displayName}!
@@ -135,20 +271,29 @@ export function DashboardShell({ displayName }: DashboardShellProps) {
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="default" size="sm" className="shadow-sm">
-              Add Transaction
-            </Button>
-            <Button variant="outline" size="sm" className="shadow-sm">
-              Export Data
+            <Select value={selectedCurrency} onValueChange={handleCurrencyChange}>
+              <SelectTrigger className="w-[210px]" disabled={isUpdatingCurrency}>
+                <SelectValue placeholder="Select currency" />
+              </SelectTrigger>
+              <SelectContent>
+                {supportedCurrencies.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={openCreate}>Add Transaction</Button>
+            <Button variant="outline" onClick={handleExport}>
+              <Upload className="mr-2 h-4 w-4" /> Export Data
             </Button>
             <Button
               variant="secondary"
-              size="sm"
-              className="shadow-sm"
               onClick={() => void fetchExpenses()}
               disabled={isLoading}
             >
-              {isLoading ? "Refreshing..." : "Refresh"}
+              <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
+              {isLoading ? "Refreshing" : "Refresh"}
             </Button>
             <SignOutButton />
           </div>
@@ -160,20 +305,185 @@ export function DashboardShell({ displayName }: DashboardShellProps) {
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
               title="Total Income"
-              value={currencyFormatter.format(totalIncome)}
-              subtitle="vs. last month"
+              value={formatSummaryValue(summary.income)}
+              subtitle="For the active filters"
             />
             <SummaryCard
               title="Total Expenses"
-              value={currencyFormatter.format(totalExpenses)}
-              subtitle="vs. last month"
+              value={formatSummaryValue(summary.expense)}
+              subtitle="For the active filters"
             />
             <SummaryCard
               title="Net Balance"
-              value={currencyFormatter.format(netBalance)}
-              subtitle="Updated daily"
+              value={formatSummaryValue(summary.net)}
+              subtitle="Income minus expenses"
             />
-            <SummaryCard title="Upcoming Bills" value="0" subtitle="Due this week" />
+            <Card className="shadow-sm">
+              <CardHeader className="space-y-1">
+                <CardDescription>Active filters</CardDescription>
+                <CardTitle className="text-3xl font-semibold tracking-tight">
+                  {filters.category || filters.type || filters.from || filters.to
+                    ? "Custom view"
+                    : "All data"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2 text-xs">
+                {filters.type ? <Badge variant="outline">Type: {filters.type}</Badge> : null}
+                {filters.category ? (
+                  <Badge variant="outline">Category: {filters.category}</Badge>
+                ) : null}
+                {filters.from ? (
+                  <Badge variant="outline">From: {format(new Date(filters.from), "MMM d, yyyy")}</Badge>
+                ) : null}
+                {filters.to ? (
+                  <Badge variant="outline">To: {format(new Date(filters.to), "MMM d, yyyy")}</Badge>
+                ) : null}
+              </CardContent>
+              <CardFooter>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setDateRange(undefined);
+                    await resetFilters();
+                  }}
+                  disabled={isLoading}
+                >
+                  Clear filters
+                </Button>
+              </CardFooter>
+            </Card>
+          </section>
+
+          <section className="grid gap-4 rounded-xl border bg-card p-6 shadow-sm">
+            <header className="flex flex-wrap items-center gap-3">
+              <Badge variant="outline" className="px-3 py-1 text-xs uppercase">
+                <Filter className="mr-2 h-3 w-3" /> Filters
+              </Badge>
+
+              <Select
+                value={activeType}
+                onValueChange={async (value) => {
+                  await handleFilterChange({
+                    type: value === "ALL" ? undefined : (value as TransactionType),
+                  });
+                }}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Transaction type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {typeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters.category ?? "ALL"}
+                onValueChange={async (value) => {
+                  await handleFilterChange({ category: value === "ALL" ? undefined : value });
+                }}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All categories</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-[240px] justify-start">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from || dateRange?.to ? (
+                      <span>
+                        {dateRange?.from ? format(dateRange.from, "MMM d, yyyy") : "--"} –
+                        {" "}
+                        {dateRange?.to ? format(dateRange.to, "MMM d, yyyy") : "--"}
+                      </span>
+                    ) : (
+                      <span>Select date range</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={(range) => void handleDateRangeChange(range ?? undefined)}
+                    numberOfMonths={2}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </header>
+
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+            <TransactionsTable
+              expenses={expenses}
+              onEdit={openEdit}
+              onDelete={openDelete}
+              formatAmount={formatAmount}
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
+              <p className="text-xs text-muted-foreground">
+                Showing {(page - 1) * pageSize + 1} -
+                {Math.min(page * pageSize, totalCount)} of {totalCount} transactions
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (page > 1) await setPage(page - 1);
+                  }}
+                  disabled={page === 1 || isLoading}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (page < totalPages) await setPage(page + 1);
+                  }}
+                  disabled={page === totalPages || isLoading}
+                >
+                  Next
+                </Button>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={async (value) => {
+                    await setPageSize(Number(value));
+                  }}
+                >
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Rows" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 20, 50].map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size} / page
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </section>
 
           <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -186,9 +496,9 @@ export function DashboardShell({ displayName }: DashboardShellProps) {
               </CardHeader>
               <CardContent className="pt-6">
                 <ExpenseTrendChart
-                  data={monthlyTrendData}
+                  data={trend}
                   isLoading={isLoading}
-                  formatCurrency={formatCurrency}
+                  formatCurrency={(value) => formatCurrencyValue(value, selectedCurrency)}
                 />
               </CardContent>
             </Card>
@@ -196,14 +506,14 @@ export function DashboardShell({ displayName }: DashboardShellProps) {
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
                   <CardTitle className="text-lg">Category Breakdown</CardTitle>
-                  <CardDescription>This month</CardDescription>
+                  <CardDescription>This period</CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="pt-6">
                 <CategoryBreakdownChart
                   data={categoryBreakdown}
                   isLoading={isLoading}
-                  formatCurrency={formatCurrency}
+                  formatCurrency={(value) => formatCurrencyValue(value, selectedCurrency)}
                 />
               </CardContent>
             </Card>
@@ -214,31 +524,19 @@ export function DashboardShell({ displayName }: DashboardShellProps) {
               <div>
                 <CardTitle className="text-lg">Recent Transactions</CardTitle>
                 <CardDescription>
-                  {expenses.length === 0
+                  {recent.length === 0
                     ? "Add transactions to start tracking your spending."
                     : "Your latest activity appears here."}
                 </CardDescription>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button variant="outline" size="sm" className="shadow-sm">
-                  Filters
-                </Button>
-                <Button variant="outline" size="sm" className="shadow-sm">
-                  Download CSV
-                </Button>
               </div>
             </CardHeader>
             <Separator />
             <CardContent className="space-y-4">
               {isLoading ? (
-                <p className="text-sm text-muted-foreground">
-                  Loading your transactions...
-                </p>
-              ) : error ? (
-                <p className="text-sm font-medium text-destructive">{error}</p>
-              ) : recentTransactions.length > 0 ? (
+                <p className="text-sm text-muted-foreground">Loading your transactions…</p>
+              ) : recent.length > 0 ? (
                 <ul className="space-y-3">
-                  {recentTransactions.map((transaction) => (
+                  {recent.map((transaction) => (
                     <li
                       key={transaction.id}
                       className="flex items-center justify-between rounded-lg border border-transparent bg-muted/40 px-4 py-3 shadow-sm transition-colors hover:border-border hover:bg-background"
@@ -250,24 +548,43 @@ export function DashboardShell({ displayName }: DashboardShellProps) {
                         </span>
                       </div>
                       <span
-                        className={`text-sm font-semibold ${transaction.type === "INCOME" ? "text-emerald-600" : "text-rose-500"}`}
+                        className={cn(
+                          "text-sm font-semibold",
+                          transaction.type === "INCOME" ? "text-emerald-600" : "text-rose-500",
+                        )}
                       >
-                        {transaction.type === "INCOME" ? "+" : "-"}
-                        {currencyFormatter.format(transaction.amount)}
+                        {formatAmount(transaction.amount, transaction.type)}
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/40 p-10 text-center text-sm text-muted-foreground">
-                  You don&apos;t have any transactions yet. Add your first income or
-                  expense to see it here.
+                  You don&apos;t have any transactions yet. Add your first income or expense to see it here.
                 </p>
               )}
             </CardContent>
           </Card>
         </div>
       </main>
+
+      <TransactionDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        mode={editingExpense ? "edit" : "create"}
+        expense={editingExpense}
+      />
+
+      <DeleteExpenseDialog
+        expense={deleteExpense}
+        open={isDeleteOpen}
+        onOpenChange={(open) => {
+          setIsDeleteOpen(open);
+          if (!open) {
+            setDeleteExpense(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -285,9 +602,7 @@ function SummaryCard({
     <Card className="shadow-sm">
       <CardHeader className="space-y-1">
         <CardDescription>{title}</CardDescription>
-        <CardTitle className="text-3xl font-semibold tracking-tight">
-          {value}
-        </CardTitle>
+        <CardTitle className="text-3xl font-semibold tracking-tight">{value}</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-xs text-muted-foreground">{subtitle}</p>

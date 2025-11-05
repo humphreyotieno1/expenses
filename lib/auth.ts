@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 
 import prisma from "@/lib/prisma";
+import type { SupportedCurrency } from "@/lib/currency";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -45,6 +46,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           onboarded: user.onboarded,
+          currency: user.currency,
         };
       },
     }),
@@ -63,6 +65,10 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name;
       }
 
+      if (session.user && typeof token.currency === "string") {
+        session.user.currency = token.currency as SupportedCurrency;
+      }
+
       return session;
     },
     jwt: async ({ token, user, trigger, session }) => {
@@ -70,6 +76,7 @@ export const authOptions: NextAuthOptions = {
         token.sub = user.id;
         token.name = user.name ?? token.name;
         token.onboarded = (user as { onboarded?: boolean }).onboarded ?? false;
+        token.currency = (user as { currency?: string }).currency ?? "USD";
       } else if (trigger === "update" && session?.user) {
         if (typeof session.user.name !== "undefined") {
           token.name = session.user.name ?? null;
@@ -77,15 +84,19 @@ export const authOptions: NextAuthOptions = {
         if (typeof session.user.onboarded !== "undefined") {
           token.onboarded = session.user.onboarded;
         }
+        if (typeof session.user.currency !== "undefined") {
+          token.currency = session.user.currency;
+        }
       } else if (token.sub && typeof token.onboarded === "undefined") {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: { onboarded: true, name: true },
+          select: { onboarded: true, name: true, currency: true },
         });
 
         if (dbUser) {
           token.onboarded = dbUser.onboarded;
           token.name = dbUser.name ?? token.name;
+          token.currency = dbUser.currency;
         }
       }
 

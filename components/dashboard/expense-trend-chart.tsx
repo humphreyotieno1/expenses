@@ -11,13 +11,6 @@ import {
   YAxis,
 } from "recharts";
 
-const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
 export type TrendDatum = {
   label: string;
   income: number;
@@ -73,8 +66,8 @@ export function ExpenseTrendChart({
           tickLine={false}
           axisLine={false}
           stroke="var(--muted-foreground)"
-          tickFormatter={(value) => compactCurrencyFormatter.format(Number(value))}
-          width={70}
+          tickFormatter={(value) => formatCurrency(Number(value))}
+          width={100}
         />
         <Tooltip
           cursor={{ strokeDasharray: "4 4", stroke: "var(--border)" }}

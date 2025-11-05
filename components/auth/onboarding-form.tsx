@@ -18,30 +18,37 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { supportedCurrencies, type SupportedCurrency } from "@/lib/currency";
 
 const onboardingSchema = z.object({
   name: z
     .string()
-    .transform((value) => value.trim())
-    .refine((value) => value.length === 0 || value.length >= 2, {
-      message: "Name must contain at least 2 characters.",
-    })
-    .refine((value) => value.length <= 120, {
-      message: "Please keep your name under 120 characters.",
-    }),
+    .trim()
+    .min(2, "Name must contain at least 2 characters.")
+    .max(120, "Name must be 120 characters or less."),
+  currency: z.enum(supportedCurrencies.map((currency) => currency.value) as [SupportedCurrency, ...SupportedCurrency[]]),
 });
 
-type OnboardingFormValues = z.output<typeof onboardingSchema>;
+type OnboardingFormValues = z.infer<typeof onboardingSchema>;
 
 export function OnboardingForm() {
   const router = useRouter();
   const { data: session, update } = useSession();
   const defaultName = session?.user?.name ?? "";
+  const defaultCurrency = session?.user?.currency ?? "USD";
 
   const form = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {
       name: defaultName,
+      currency: defaultCurrency as SupportedCurrency,
     },
   });
 
@@ -56,8 +63,9 @@ export function OnboardingForm() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: values.name ? values.name : undefined,
+          name: values.name,
           onboarded: true,
+          currency: values.currency,
         }),
       });
 
@@ -78,8 +86,9 @@ export function OnboardingForm() {
       await update({
         user: {
           ...(session?.user ?? {}),
-          name: values.name ? values.name : session?.user?.name ?? null,
+          name: values.name,
           onboarded: true,
+          currency: values.currency,
         },
       });
 
@@ -108,6 +117,36 @@ export function OnboardingForm() {
               <FormDescription>
                 This helps personalise reports and summaries. You can change it later.
               </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="currency"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Default currency</FormLabel>
+              <FormControl>
+                <Select
+                  disabled={isPending}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supportedCurrencies.map((currencyOption) => (
+                      <SelectItem key={currencyOption.value} value={currencyOption.value}>
+                        {currencyOption.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormDescription>Choose the currency you use most often when tracking transactions.</FormDescription>
               <FormMessage />
             </FormItem>
           )}

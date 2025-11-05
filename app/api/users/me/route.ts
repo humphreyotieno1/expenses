@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { supportedCurrencies } from "@/lib/currency";
+import type { Currency } from "@prisma/client";
 
 const onboardingSchema = z.object({
   name: z
@@ -13,6 +15,9 @@ const onboardingSchema = z.object({
     .max(120, "Name must be less than 120 characters.")
     .optional(),
   onboarded: z.boolean().optional(),
+  currency: z
+    .enum(supportedCurrencies.map((item) => item.value) as [string, ...string[]])
+    .optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -38,12 +43,16 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Invalid request payload." }, { status: 400 });
   }
 
-  const data: { name?: string | null; onboarded: boolean } = {
+  const data: { name?: string | null; onboarded: boolean; currency?: Currency } = {
     onboarded: payload.onboarded ?? true,
   };
 
   if (typeof payload.name !== "undefined") {
     data.name = payload.name.length > 0 ? payload.name : null;
+  }
+
+  if (typeof payload.currency !== "undefined") {
+    data.currency = payload.currency as Currency;
   }
 
   const updated = await prisma.user.update({
@@ -53,6 +62,7 @@ export async function PATCH(request: Request) {
       id: true,
       name: true,
       onboarded: true,
+      currency: true,
     },
   });
 
