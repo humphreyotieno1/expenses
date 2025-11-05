@@ -86,6 +86,7 @@ prisma/
 
 - Set `NEXTAUTH_URL` to the production origin (e.g., Vercel URL) and ensure `NEXTAUTH_SECRET` is configured in the hosting environment.
 - Run `bunx prisma migrate deploy` on production to apply migrations.
+- Keep Prisma client binaries up to date: after changing the schema locally run `bunx prisma generate` so both the native (dev) and `rhel-openssl-3.0.x` (Linux deploy) engines are emitted in `lib/generated/prisma`.
 - Configure Neon (or chosen Postgres provider) networking/connection pooling as needed.
 
 ## Troubleshooting
