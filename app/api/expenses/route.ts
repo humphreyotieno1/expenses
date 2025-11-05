@@ -3,10 +3,12 @@ import { getServerSession } from "next-auth";
 import { ZodError } from "zod";
 
 import { authOptions } from "@/lib/auth";
-import { type CreateExpenseInput, createExpenseSchema } from "@/lib/validators/expense";
+import {
+  type CreateExpenseInput,
+  type TransactionType,
+  createExpenseSchema,
+} from "@/lib/validators/expense";
 import prisma from "@/lib/prisma";
-import { Prisma } from "@/lib/generated/prisma/client";
-import type { TransactionType } from "@/lib/generated/prisma/enums";
 
 function parseTypeParam(value: string | null): TransactionType | undefined {
   if (!value) return undefined;
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
 
-  const dateFilter: Prisma.DateTimeFilter = {};
+  const dateFilter: { gte?: Date; lte?: Date } = {};
 
   if (fromParam) {
     const parsed = new Date(fromParam);
@@ -64,7 +66,12 @@ export async function GET(request: Request) {
     }
   }
 
-  const where: Prisma.ExpenseWhereInput = {
+  const where: {
+    userId: string;
+    category?: string;
+    type?: TransactionType;
+    date?: { gte?: Date; lte?: Date };
+  } = {
     userId: session.user.id,
   };
 
@@ -85,8 +92,10 @@ export async function GET(request: Request) {
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
 
+  type ExpenseRecord = (typeof expenses)[number];
+
   return NextResponse.json({
-    data: expenses.map((expense) => serializeExpense(expense)),
+    data: expenses.map((expense: ExpenseRecord) => serializeExpense(expense)),
   });
 }
 
@@ -124,7 +133,7 @@ export async function POST(request: Request) {
         title: payload.title.trim(),
         category: payload.category.trim(),
         type: payload.type,
-        amount: new Prisma.Decimal(payload.amount),
+        amount: payload.amount,
         date: payload.date,
         notes: payload.notes?.trim() ?? null,
       },

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { TransactionType } from "@/lib/generated/prisma/enums";
+
+export type TransactionType = "INCOME" | "EXPENSE";
 
 const transactionTypeValues = ["income", "expense", "INCOME", "EXPENSE"] as const;
 

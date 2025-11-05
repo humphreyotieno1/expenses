@@ -4,8 +4,8 @@ import { ZodError } from "zod";
 
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { Prisma } from "@/lib/generated/prisma/client";
 import {
+  type TransactionType,
   type UpdateExpenseInput,
   updateExpenseSchema,
 } from "@/lib/validators/expense";
@@ -93,7 +93,14 @@ export async function PUT(
     return NextResponse.json({ error: "Failed to parse request." }, { status: 400 });
   }
 
-  const data: Prisma.ExpenseUpdateInput = {};
+  const data: {
+    title?: string;
+    category?: string;
+    type?: TransactionType;
+    amount?: number;
+    date?: Date;
+    notes?: string | null;
+  } = {};
 
   if (payload.title !== undefined) {
     data.title = payload.title.trim();
@@ -108,7 +115,7 @@ export async function PUT(
   }
 
   if (payload.amount !== undefined) {
-    data.amount = new Prisma.Decimal(payload.amount);
+    data.amount = payload.amount;
   }
 
   if (payload.date !== undefined) {

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,11 +33,21 @@ export function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlError = searchParams.get("error");
+  const signupSuccess = searchParams.get("signup");
 
   const [formError, setFormError] = useState<string | null>(
     urlError ? "Unable to sign in with the provided credentials." : null,
   );
   const [isPending, startTransition] = useTransition();
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (signupSuccess === "1") {
+      toast.success("Account created", {
+        description: "Sign in with your new credentials to continue.",
+      });
+    }
+  }, [signupSuccess]);
 
   const form = useForm<SignInFormValues>({
     resolver: zodResolver(signInSchema),
@@ -55,14 +67,19 @@ export function SignInForm() {
       });
 
       if (result?.ok) {
+        toast.success("Welcome back!", {
+          description: "You're signed in and ready to track expenses.",
+        });
         router.replace("/dashboard");
         router.refresh();
         return;
       }
 
-      setFormError(
-        result?.error ?? "Invalid email or password. Please try again.",
-      );
+      const message =
+        result?.error ?? "Invalid email or password. Please try again.";
+
+      setFormError(message);
+      toast.error("Sign in failed", { description: message });
     });
   };
 
@@ -97,13 +114,24 @@ export function SignInForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  disabled={isPending}
-                  {...field}
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    disabled={isPending}
+                    {...field}
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute inset-y-0 right-3 inline-flex items-center text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>

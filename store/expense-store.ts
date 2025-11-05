@@ -3,10 +3,10 @@
 import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
 
-import type { TransactionType } from "@/lib/generated/prisma/enums";
 import {
   type CreateExpenseInput,
   type UpdateExpenseInput,
+  type TransactionType,
 } from "@/lib/validators/expense";
 
 export type Expense = {
