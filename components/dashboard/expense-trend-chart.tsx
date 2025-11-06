@@ -48,7 +48,7 @@ export function ExpenseTrendChart({
     <ResponsiveContainer width="100%" height={260}>
       <LineChart
         data={data}
-        margin={{ top: 16, right: 24, bottom: 8, left: 0 }}
+        margin={{ top: 16, right: 24, bottom: 8, left: 80 }}
       >
         <CartesianGrid
           stroke="var(--border)"
@@ -66,8 +66,20 @@ export function ExpenseTrendChart({
           tickLine={false}
           axisLine={false}
           stroke="var(--muted-foreground)"
-          tickFormatter={(value) => formatCurrency(Number(value))}
-          width={100}
+          tickFormatter={(value) => {
+            const formatted = formatCurrency(Number(value));
+            // Use compact notation for very long values
+            if (formatted.length > 12) {
+              return new Intl.NumberFormat("en-US", {
+                style: "currency",
+                currency: formatted.match(/[A-Z]{3}/)?.[0] || "USD",
+                notation: "compact",
+                maximumFractionDigits: 1,
+              }).format(Number(value));
+            }
+            return formatted;
+          }}
+          width={80}
         />
         <Tooltip
           cursor={{ strokeDasharray: "4 4", stroke: "var(--border)" }}
@@ -75,10 +87,14 @@ export function ExpenseTrendChart({
             borderRadius: 12,
             borderColor: "var(--border)",
             background: "var(--background)",
+            color: "var(--foreground)",
             boxShadow:
               "0px 10px 30px rgba(15, 23, 42, 0.12), 0px 3px 10px rgba(15, 23, 42, 0.08)",
           }}
-          labelStyle={{ fontWeight: 600 }}
+          labelStyle={{
+            color: "var(--foreground)",
+            fontWeight: 600,
+          }}
           formatter={(value: number, name) => {
             const label = name === "income" ? "Income" : "Expenses";
             return [formatCurrency(value), label];

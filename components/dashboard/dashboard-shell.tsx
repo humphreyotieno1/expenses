@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
+import { format, endOfToday, endOfDay, startOfDay, subDays, subMonths } from "date-fns";
 import { CalendarIcon, Filter, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
@@ -32,6 +32,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
   useExpenseStore,
@@ -57,6 +71,68 @@ type DashboardShellProps = {
   displayName: string;
   currency: SupportedCurrency;
 };
+
+const quickExportOptions: Array<{
+  label: string;
+  range: () => { from: Date; to: Date };
+}> = [
+  {
+    label: "Last 7 days",
+    range: () => {
+      const to = endOfToday();
+      const from = startOfDay(subDays(to, 6));
+      return { from, to };
+    },
+  },
+  {
+    label: "Last 14 days",
+    range: () => {
+      const to = endOfToday();
+      const from = startOfDay(subDays(to, 13));
+      return { from, to };
+    },
+  },
+  {
+    label: "Last 21 days",
+    range: () => {
+      const to = endOfToday();
+      const from = startOfDay(subDays(to, 20));
+      return { from, to };
+    },
+  },
+  {
+    label: "Last 30 days",
+    range: () => {
+      const to = endOfToday();
+      const from = startOfDay(subDays(to, 29));
+      return { from, to };
+    },
+  },
+  {
+    label: "Last 1 month",
+    range: () => {
+      const to = endOfToday();
+      const from = startOfDay(subMonths(to, 1));
+      return { from, to };
+    },
+  },
+  {
+    label: "Last 2 months",
+    range: () => {
+      const to = endOfToday();
+      const from = startOfDay(subMonths(to, 2));
+      return { from, to };
+    },
+  },
+  {
+    label: "Last 3 months",
+    range: () => {
+      const to = endOfToday();
+      const from = startOfDay(subMonths(to, 3));
+      return { from, to };
+    },
+  },
+];
 
 export function DashboardShell({ displayName, currency }: DashboardShellProps) {
   const router = useRouter();
@@ -105,9 +181,6 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
-  const [selectedCurrency, setSelectedCurrency] = useState<SupportedCurrency>(currency);
-  const [isUpdatingCurrency, setIsUpdatingCurrency] = useState(false);
-
   const initialRange: DateRange | undefined = filters.from || filters.to
     ? {
         from: filters.from ? new Date(filters.from) : undefined,
@@ -115,6 +188,10 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
       }
     : undefined;
   const [dateRange, setDateRange] = useState<DateRange | undefined>(initialRange);
+  const [selectedCurrency, setSelectedCurrency] = useState<SupportedCurrency>(currency);
+  const [isUpdatingCurrency, setIsUpdatingCurrency] = useState(false);
+  const [isCustomExportOpen, setIsCustomExportOpen] = useState(false);
+  const [customExportRange, setCustomExportRange] = useState<DateRange | undefined>();
 
   useEffect(() => {
     void fetchExpenses();
@@ -122,7 +199,12 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  const categories = useMemo(() => categoryBreakdown.map((slice) => slice.name), [categoryBreakdown]);
+  const categories = useMemo(() => {
+    const unique = new Set<string>();
+    categoryBreakdown.forEach((slice) => unique.add(slice.name));
+    expenses.forEach((expense) => unique.add(expense.category));
+    return Array.from(unique).filter(Boolean).sort();
+  }, [categoryBreakdown, expenses]);
 
   const formatAmount = useMemo(
     () => (amount: number, type: TransactionType) => {
@@ -152,18 +234,26 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
     });
   };
 
-  const handleExport = async () => {
+  const handleExport = async (range?: { from?: Date; to?: Date }) => {
     const params = new URLSearchParams();
     if (filters.category) params.set("category", filters.category);
     if (filters.type) params.set("type", filters.type);
-    if (filters.from) params.set("from", filters.from);
-    if (filters.to) params.set("to", filters.to);
     if (filters.search) params.set("search", filters.search);
+
+    const fromDateRaw = range?.from ?? (filters.from ? new Date(filters.from) : undefined);
+    const toDateRaw = range?.to ?? (filters.to ? new Date(filters.to) : undefined);
+
+    const fromDate = fromDateRaw ? startOfDay(fromDateRaw) : undefined;
+    const toDate = toDateRaw ? endOfDay(toDateRaw) : undefined;
+
+    if (fromDate) params.set("from", fromDate.toISOString());
+    if (toDate) params.set("to", toDate.toISOString());
+
     params.set("page", "1");
-    params.set("pageSize", Math.max(totalCount, pageSize).toString());
+    params.set("pageSize", Math.max(totalCount || pageSize, pageSize).toString());
 
     try {
-      const response = await fetch(`/api/expenses?${params.toString()}`);
+      const response = await fetch(`/api/expenses?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) {
         throw new Error(await response.text());
       }
@@ -176,7 +266,7 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
       }
 
       const headers = ["Date", "Title", "Category", "Type", "Amount", "Notes"];
-      const csvRows = rows.map((expense: Expense) => [
+      const csvRows = rows.map((expense) => [
         format(new Date(expense.date), "yyyy-MM-dd"),
         expense.title,
         expense.category,
@@ -200,7 +290,7 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
       URL.revokeObjectURL(url);
 
       toast.success("Export started", {
-        description: "A CSV containing your current filters is downloading.",
+        description: "A CSV containing your selected period is downloading.",
       });
     } catch (error) {
       console.error("[Dashboard][export]", error);
@@ -284,9 +374,27 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
               </SelectContent>
             </Select>
             <Button onClick={openCreate}>Add Transaction</Button>
-            <Button variant="outline" onClick={handleExport}>
-              <Upload className="mr-2 h-4 w-4" /> Export Data
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Upload className="mr-2 h-4 w-4" /> Export Data
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                {quickExportOptions.map((option) => (
+                  <DropdownMenuItem
+                    key={option.label}
+                    onClick={() => handleExport(option.range())}
+                  >
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setIsCustomExportOpen(true)}>
+                  Custom range…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="secondary"
               onClick={() => void fetchExpenses()}
@@ -438,7 +546,7 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
 
             <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
               <p className="text-xs text-muted-foreground">
-                Showing {(page - 1) * pageSize + 1} -
+                Showing {(page - 1) * pageSize + 1} –
                 {Math.min(page * pageSize, totalCount)} of {totalCount} transactions
               </p>
               <div className="flex items-center gap-2">
@@ -573,6 +681,8 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
         onOpenChange={setIsDialogOpen}
         mode={editingExpense ? "edit" : "create"}
         expense={editingExpense}
+        categories={categories}
+        defaultCategory={filters.category ?? categories[0] ?? "Other"}
       />
 
       <DeleteExpenseDialog
@@ -585,6 +695,42 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
           }
         }}
       />
+
+      <Dialog open={isCustomExportOpen} onOpenChange={setIsCustomExportOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select export range</DialogTitle>
+          </DialogHeader>
+          <Calendar
+            mode="range"
+            selected={customExportRange}
+            onSelect={setCustomExportRange}
+            numberOfMonths={2}
+            initialFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCustomExportOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!customExportRange?.from || !customExportRange?.to) {
+                  toast.error("Select a start and end date to export.");
+                  return;
+                }
+                void handleExport({
+                  from: customExportRange.from,
+                  to: customExportRange.to,
+                });
+                setIsCustomExportOpen(false);
+              }}
+              disabled={!customExportRange?.from || !customExportRange?.to}
+            >
+              Export
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

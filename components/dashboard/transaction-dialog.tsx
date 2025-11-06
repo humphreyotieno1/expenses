@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarIcon, ChevronDown, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
@@ -43,20 +44,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useExpenseStore, type Expense } from "@/store/expense-store";
 import { type TransactionType } from "@/lib/validators/expense";
-
-const categories = [
-  "Food",
-  "Rent",
-  "Utilities",
-  "Transport",
-  "Entertainment",
-  "Healthcare",
-  "Education",
-  "Savings",
-  "Shopping",
-  "Travel",
-  "Other",
-];
 
 const transactionSchema = z.object({
   title: z.string().min(1, "Title is required."),
@@ -81,17 +68,24 @@ type TransactionDialogProps = {
   open: boolean;
   mode: "create" | "edit";
   expense?: Expense | null;
+  categories: string[];
+  defaultCategory?: string;
   onOpenChange: (open: boolean) => void;
 };
 
-export function TransactionDialog({ open, mode, expense, onOpenChange }: TransactionDialogProps) {
+export function TransactionDialog({ open, mode, expense, categories, defaultCategory = "Other", onOpenChange }: TransactionDialogProps) {
+  const availableCategories = categories.length ? categories : ["Other"];
+  const resolvedDefaultCategory = defaultCategory ?? availableCategories[0] ?? "Other";
+  const [isCategoryPopoverOpen, setIsCategoryPopoverOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema) as Resolver<TransactionFormValues>,
     defaultValues: {
       title: "",
       amount: 0,
       type: "EXPENSE",
-      category: "Other",
+      category: resolvedDefaultCategory,
       date: new Date(),
       notes: "",
     },
@@ -100,12 +94,12 @@ export function TransactionDialog({ open, mode, expense, onOpenChange }: Transac
   const createExpense = useExpenseStore((state) => state.createExpense);
   const updateExpense = useExpenseStore((state) => state.updateExpense);
   const fetchExpenses = useExpenseStore((state) => state.fetchExpenses);
-  const filters = useExpenseStore((state) => state.filters);
 
   const isSubmitting = form.formState.isSubmitting;
 
   useEffect(() => {
     if (open) {
+      setCategorySearch("");
       if (mode === "edit" && expense) {
         form.reset({
           title: expense.title,
@@ -120,13 +114,13 @@ export function TransactionDialog({ open, mode, expense, onOpenChange }: Transac
           title: "",
           amount: 0,
           type: "EXPENSE",
-          category: filters.category ?? "Other",
+          category: resolvedDefaultCategory,
           date: new Date(),
           notes: "",
         });
       }
     }
-  }, [open, mode, expense, form, filters.category]);
+  }, [open, mode, expense, form, resolvedDefaultCategory]);
 
   const handleSubmit = async (values: TransactionFormValues) => {
     const payload = {
@@ -242,30 +236,102 @@ export function TransactionDialog({ open, mode, expense, onOpenChange }: Transac
               <FormField
                 control={form.control}
                 name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category</FormLabel>
-                    <FormControl>
-                      <Select
-                        disabled={isSubmitting}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const filteredCategories = availableCategories.filter((cat) =>
+                    cat.toLowerCase().includes(categorySearch.toLowerCase())
+                  );
+                  const showCreateOption = categorySearch && !availableCategories.includes(categorySearch);
+
+                  return (
+                    <FormItem>
+                      <FormLabel>Category</FormLabel>
+                      <FormControl>
+                        <Popover open={isCategoryPopoverOpen} onOpenChange={setIsCategoryPopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              role="combobox"
+                              className={cn(
+                                "w-full justify-between",
+                                !field.value && "text-muted-foreground"
+                              )}
+                              disabled={isSubmitting}
+                            >
+                              {field.value || "Select or type a category..."}
+                              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                            <div className="flex flex-col">
+                              <Input
+                                placeholder="Search or type new category..."
+                                value={categorySearch}
+                                onChange={(e) => setCategorySearch(e.target.value)}
+                                className="m-2"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && categorySearch) {
+                                    field.onChange(categorySearch);
+                                    setCategorySearch("");
+                                    setIsCategoryPopoverOpen(false);
+                                  }
+                                }}
+                              />
+                              <div className="max-h-[200px] overflow-y-auto">
+                                {filteredCategories.length > 0 ? (
+                                  filteredCategories.map((category) => (
+                                    <button
+                                      key={category}
+                                      type="button"
+                                      className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
+                                        field.value === category && "bg-accent"
+                                      )}
+                                      onClick={() => {
+                                        field.onChange(category);
+                                        setCategorySearch("");
+                                        setIsCategoryPopoverOpen(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "h-4 w-4",
+                                          field.value === category ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {category}
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="px-3 py-2 text-sm text-muted-foreground">
+                                    No categories found
+                                  </div>
+                                )}
+                                {showCreateOption && (
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center gap-2 border-t px-3 py-2 text-left text-sm font-medium text-primary hover:bg-accent"
+                                    onClick={() => {
+                                      field.onChange(categorySearch);
+                                      setCategorySearch("");
+                                      setIsCategoryPopoverOpen(false);
+                                    }}
+                                  >
+                                    <span>Create &quot;{categorySearch}&quot;</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </FormControl>
+                      <FormDescription>
+                        Choose an existing category or type a new label to create one.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
               <FormField
