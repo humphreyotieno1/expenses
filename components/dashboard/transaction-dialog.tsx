@@ -62,7 +62,6 @@ const transactionSchema = z.object({
     .transform((value) => (value?.trim() ? value.trim() : undefined)),
   savingsLocation: z
     .string()
-    .min(1, "Savings location is required.")
     .max(100, "Location must be 100 characters or less.")
     .optional()
     .transform((value) => (value?.trim() ? value.trim() : undefined)),
