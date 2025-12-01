@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { ZodError } from "zod";
+import { format, differenceInDays } from "date-fns";
 
 import { authOptions } from "@/lib/auth";
 import { type CreateExpenseInput, createExpenseSchema, type TransactionType } from "@/lib/validators/expense";
@@ -10,7 +11,7 @@ function parseTypeParam(value: string | null): TransactionType | undefined {
   if (!value) return undefined;
 
   const normalized = value.toUpperCase();
-  if (normalized === "INCOME" || normalized === "EXPENSE") {
+  if (normalized === "INCOME" || normalized === "EXPENSE" || normalized === "SAVINGS") {
     return normalized as TransactionType;
   }
 
@@ -28,6 +29,7 @@ function serializeExpense(expense: Awaited<ReturnType<typeof prisma.expense.find
     amount: Number(expense.amount),
     date: expense.date.toISOString(),
     notes: expense.notes,
+    savingsLocation: expense.savingsLocation,
     createdAt: expense.createdAt.toISOString(),
     updatedAt: expense.updatedAt.toISOString(),
   };
@@ -111,42 +113,54 @@ export async function GET(request: Request) {
       const amount = Number(expense.amount);
       if (expense.type === "INCOME") {
         acc.income += amount;
-      } else {
+      } else if (expense.type === "EXPENSE") {
         acc.expense += amount;
+      } else if (expense.type === "SAVINGS") {
+        acc.savings += amount;
       }
-      acc.net = acc.income - acc.expense;
+      acc.net = acc.income - acc.expense - acc.savings;
       return acc;
     },
-    { income: 0, expense: 0, net: 0 },
+    { income: 0, expense: 0, savings: 0, net: 0 },
   );
 
   const trendMap = new Map<string, { label: string; income: number; expense: number; order: number }>();
+
+  const isDaily = dateFilter.gte && dateFilter.lte && differenceInDays(dateFilter.lte, dateFilter.gte) <= 35;
 
   expenses.forEach((expense) => {
     const parsedDate = new Date(expense.date);
     if (Number.isNaN(parsedDate.valueOf())) return;
 
-    const key = `${parsedDate.getFullYear()}-${parsedDate.getMonth()}`;
+    const key = isDaily
+      ? format(parsedDate, "yyyy-MM-dd")
+      : `${parsedDate.getFullYear()}-${parsedDate.getMonth()}`;
+
     if (!trendMap.has(key)) {
       trendMap.set(key, {
-        label: formatMonthLabel(parsedDate),
+        label: isDaily ? format(parsedDate, "MMM d") : formatMonthLabel(parsedDate),
         income: 0,
         expense: 0,
-        order: parsedDate.getFullYear() * 12 + parsedDate.getMonth(),
+        order: isDaily ? parsedDate.getTime() : parsedDate.getFullYear() * 12 + parsedDate.getMonth(),
       });
     }
 
     const entry = trendMap.get(key)!;
     if (expense.type === "INCOME") {
       entry.income += Number(expense.amount);
-    } else {
+    } else if (expense.type === "EXPENSE") {
       entry.expense += Number(expense.amount);
     }
+    // Savings are not included in income/expense trend for now, or should they?
+    // The chart usually shows Income vs Expense. Savings is a separate category.
+    // If we want to show savings in trend, we'd need to update the chart component too.
+    // For now, let's keep it as Income vs Expense.
   });
 
-  const trend = Array.from(trendMap.values())
-    .sort((a, b) => a.order - b.order)
-    .slice(-6)
+  const sortedTrend = Array.from(trendMap.values()).sort((a, b) => a.order - b.order);
+
+  // If daily, show all points. If monthly, show last 6 months (default behavior).
+  const trend = (isDaily ? sortedTrend : sortedTrend.slice(-6))
     .map(({ label, income, expense }) => ({ label, income, expense }));
 
   const categoryTotals = new Map<string, number>();
@@ -158,6 +172,16 @@ export async function GET(request: Request) {
 
   const categoryBreakdown = Array.from(categoryTotals.entries()).map(([name, value]) => ({ name, value }));
 
+  // Savings breakdown by location
+  const savingsTotals = new Map<string, number>();
+  expenses.forEach((expense) => {
+    if (expense.type !== "SAVINGS") return;
+    const key = expense.savingsLocation?.trim() || "Unspecified";
+    savingsTotals.set(key, (savingsTotals.get(key) ?? 0) + Number(expense.amount));
+  });
+
+  const savingsByLocation = Array.from(savingsTotals.entries()).map(([location, value]) => ({ location, value }));
+
   return NextResponse.json({
     data: pagedExpenses,
     meta: {
@@ -168,6 +192,7 @@ export async function GET(request: Request) {
     summary,
     trend,
     categoryBreakdown,
+    savingsByLocation,
     recent,
   });
 }
@@ -213,6 +238,7 @@ export async function POST(request: Request) {
         amount: payload.amount,
         date: payload.date,
         notes: payload.notes?.trim() ?? null,
+        savingsLocation: payload.savingsLocation?.trim() ?? null,
       },
     });
 

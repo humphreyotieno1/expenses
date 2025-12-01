@@ -52,7 +52,7 @@ const transactionSchema = z.object({
     .number()
     .refine((num) => Number.isFinite(num), "Amount must be valid.")
     .refine((num) => num >= 0, "Amount cannot be negative."),
-  type: z.enum(["INCOME", "EXPENSE"] as const satisfies readonly TransactionType[]),
+  type: z.enum(["INCOME", "EXPENSE", "SAVINGS"] as const satisfies readonly TransactionType[]),
   category: z.string().min(1, "Category is required."),
   date: z.coerce.date(),
   notes: z
@@ -60,7 +60,19 @@ const transactionSchema = z.object({
     .max(500, "Notes must be less than 500 characters.")
     .optional()
     .transform((value) => (value?.trim() ? value.trim() : undefined)),
-});
+  savingsLocation: z
+    .string()
+    .min(1, "Savings location is required.")
+    .max(100, "Location must be 100 characters or less.")
+    .optional()
+    .transform((value) => (value?.trim() ? value.trim() : undefined)),
+}).refine(
+  (data) => data.type !== "SAVINGS" || data.savingsLocation,
+  {
+    message: "Savings location is required when type is SAVINGS.",
+    path: ["savingsLocation"],
+  }
+);
 
 export type TransactionFormValues = z.infer<typeof transactionSchema>;
 
@@ -88,6 +100,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
       category: resolvedDefaultCategory,
       date: new Date(),
       notes: "",
+      savingsLocation: "",
     },
   });
 
@@ -108,6 +121,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
           category: expense.category,
           date: new Date(expense.date),
           notes: expense.notes ?? "",
+          savingsLocation: expense.savingsLocation ?? "",
         });
       } else if (mode === "create") {
         form.reset({
@@ -117,6 +131,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
           category: resolvedDefaultCategory,
           date: new Date(),
           notes: "",
+          savingsLocation: "",
         });
       }
     }
@@ -130,6 +145,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
       category: values.category.trim(),
       date: values.date,
       notes: values.notes,
+      savingsLocation: values.savingsLocation,
     };
 
     const action = mode === "create"
@@ -157,7 +173,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
           <DialogTitle>{mode === "create" ? "Add transaction" : "Edit transaction"}</DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Capture a new income or expense entry."
+              ? "Capture a new income, expense, or savings entry."
               : "Update the details for this transaction."}
           </DialogDescription>
         </DialogHeader>
@@ -223,6 +239,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
                         <SelectContent>
                           <SelectItem value="INCOME">Income</SelectItem>
                           <SelectItem value="EXPENSE">Expense</SelectItem>
+                          <SelectItem value="SAVINGS">Savings</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>
@@ -277,7 +294,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
                                   }
                                 }}
                               />
-                              <div className="max-h-[200px] overflow-y-auto">
+                              <div className="max-h-[200px] overflow-y-auto overscroll-contain p-1">
                                 {filteredCategories.length > 0 ? (
                                   filteredCategories.map((category) => (
                                     <button
@@ -394,6 +411,29 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
                 </FormItem>
               )}
             />
+
+            {form.watch("type") === "SAVINGS" && (
+              <FormField
+                control={form.control}
+                name="savingsLocation"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Savings Location</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., Bank Account, Investment Fund, Emergency Savings"
+                        disabled={isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Where are you putting this savings?
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>

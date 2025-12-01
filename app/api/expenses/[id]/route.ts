@@ -21,6 +21,7 @@ function serializeExpense(expense: Awaited<ReturnType<typeof prisma.expense.find
     amount: expense.amount.toNumber(),
     date: expense.date.toISOString(),
     notes: expense.notes,
+    savingsLocation: expense.savingsLocation,
     createdAt: expense.createdAt.toISOString(),
     updatedAt: expense.updatedAt.toISOString(),
   };
@@ -100,6 +101,7 @@ export async function PUT(
     amount?: number;
     date?: Date;
     notes?: string | null;
+    savingsLocation?: string | null;
   } = {};
 
   if (payload.title !== undefined) {
@@ -124,6 +126,10 @@ export async function PUT(
 
   if (payload.notes !== undefined) {
     data.notes = payload.notes?.trim() ?? null;
+  }
+
+  if (payload.savingsLocation !== undefined) {
+    data.savingsLocation = payload.savingsLocation?.trim() ?? null;
   }
 
   try {

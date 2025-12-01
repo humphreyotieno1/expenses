@@ -17,6 +17,7 @@ export type Expense = {
   amount: number;
   date: string;
   notes?: string | null;
+  savingsLocation?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -32,6 +33,7 @@ export type ExpenseFilters = {
 export type ExpenseSummary = {
   income: number;
   expense: number;
+  savings: number;
   net: number;
 };
 
@@ -46,12 +48,18 @@ export type CategorySlice = {
   value: number;
 };
 
+export type SavingsLocation = {
+  location: string;
+  value: number;
+};
+
 type ExpenseState = {
   expenses: Expense[];
   recent: Expense[];
   summary: ExpenseSummary;
   trend: TrendPoint[];
   categoryBreakdown: CategorySlice[];
+  savingsByLocation: SavingsLocation[];
   totalCount: number;
   page: number;
   pageSize: number;
@@ -106,9 +114,10 @@ export const useExpenseStore = create<ExpenseState>()(
       (set, get) => ({
         expenses: [],
         recent: [],
-        summary: { income: 0, expense: 0, net: 0 },
+        summary: { income: 0, expense: 0, savings: 0, net: 0 },
         trend: [],
         categoryBreakdown: [],
+        savingsByLocation: [],
         totalCount: 0,
         page: 1,
         pageSize: 10,
@@ -149,9 +158,10 @@ export const useExpenseStore = create<ExpenseState>()(
             set({
               expenses: payload?.data ?? [],
               recent: payload?.recent ?? [],
-              summary: payload?.summary ?? { income: 0, expense: 0, net: 0 },
+              summary: payload?.summary ?? { income: 0, expense: 0, savings: 0, net: 0 },
               trend: payload?.trend ?? [],
               categoryBreakdown: payload?.categoryBreakdown ?? [],
+              savingsByLocation: payload?.savingsByLocation ?? [],
               totalCount: payload?.meta?.totalCount ?? 0,
               page: payload?.meta?.page ?? get().page,
               pageSize: payload?.meta?.pageSize ?? get().pageSize,

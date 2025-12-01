@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-export type TransactionType = "INCOME" | "EXPENSE";
+export type TransactionType = "INCOME" | "EXPENSE" | "SAVINGS";
 
-const transactionTypeValues = ["income", "expense", "INCOME", "EXPENSE"] as const;
+const transactionTypeValues = ["income", "expense", "savings", "INCOME", "EXPENSE", "SAVINGS"] as const;
 
 const transactionTypeSchema = z
   .enum(transactionTypeValues)
@@ -35,7 +35,21 @@ const baseExpenseSchema = z.object({
     .or(z.literal(""))
     .transform((value) => (value === "" ? undefined : value?.trim()))
     .optional(),
-});
+  savingsLocation: z
+    .string()
+    .min(1, "Savings location is required.")
+    .max(100, "Location must be 100 characters or less.")
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (value === "" ? undefined : value?.trim()))
+    .optional(),
+}).refine(
+  (data) => data.type !== "SAVINGS" || data.savingsLocation,
+  {
+    message: "Savings location is required when type is SAVINGS.",
+    path: ["savingsLocation"],
+  }
+);
 
 export const createExpenseSchema = baseExpenseSchema;
 

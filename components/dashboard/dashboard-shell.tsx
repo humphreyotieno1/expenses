@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { format, endOfToday, endOfDay, startOfDay, subDays, subMonths } from "date-fns";
+import { format, endOfToday, endOfDay, startOfDay, subDays, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { CalendarIcon, Filter, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
@@ -56,6 +56,9 @@ import { type TransactionType } from "@/lib/validators/expense";
 import { ExpenseTrendChart } from "@/components/dashboard/expense-trend-chart";
 import { CategoryBreakdownChart } from "@/components/dashboard/category-breakdown-chart";
 import { TransactionDialog } from "@/components/dashboard/transaction-dialog";
+import { MonthSelector } from "@/components/dashboard/month-selector";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnalyticsDashboard } from "@/components/dashboard/analytics-dashboard";
 import { TransactionsTable } from "@/components/dashboard/transactions-table";
 import { DeleteExpenseDialog } from "@/components/dashboard/delete-expense-dialog";
 import type { DateRange } from "react-day-picker";
@@ -65,6 +68,7 @@ const typeOptions: Array<{ label: string; value: TransactionType | "ALL" }> = [
   { label: "All types", value: "ALL" },
   { label: "Income", value: "INCOME" },
   { label: "Expense", value: "EXPENSE" },
+  { label: "Savings", value: "SAVINGS" },
 ];
 
 type DashboardShellProps = {
@@ -76,63 +80,63 @@ const quickExportOptions: Array<{
   label: string;
   range: () => { from: Date; to: Date };
 }> = [
-  {
-    label: "Last 7 days",
-    range: () => {
-      const to = endOfToday();
-      const from = startOfDay(subDays(to, 6));
-      return { from, to };
+    {
+      label: "Last 7 days",
+      range: () => {
+        const to = endOfToday();
+        const from = startOfDay(subDays(to, 6));
+        return { from, to };
+      },
     },
-  },
-  {
-    label: "Last 14 days",
-    range: () => {
-      const to = endOfToday();
-      const from = startOfDay(subDays(to, 13));
-      return { from, to };
+    {
+      label: "Last 14 days",
+      range: () => {
+        const to = endOfToday();
+        const from = startOfDay(subDays(to, 13));
+        return { from, to };
+      },
     },
-  },
-  {
-    label: "Last 21 days",
-    range: () => {
-      const to = endOfToday();
-      const from = startOfDay(subDays(to, 20));
-      return { from, to };
+    {
+      label: "Last 21 days",
+      range: () => {
+        const to = endOfToday();
+        const from = startOfDay(subDays(to, 20));
+        return { from, to };
+      },
     },
-  },
-  {
-    label: "Last 30 days",
-    range: () => {
-      const to = endOfToday();
-      const from = startOfDay(subDays(to, 29));
-      return { from, to };
+    {
+      label: "Last 30 days",
+      range: () => {
+        const to = endOfToday();
+        const from = startOfDay(subDays(to, 29));
+        return { from, to };
+      },
     },
-  },
-  {
-    label: "Last 1 month",
-    range: () => {
-      const to = endOfToday();
-      const from = startOfDay(subMonths(to, 1));
-      return { from, to };
+    {
+      label: "Last 1 month",
+      range: () => {
+        const to = endOfToday();
+        const from = startOfDay(subMonths(to, 1));
+        return { from, to };
+      },
     },
-  },
-  {
-    label: "Last 2 months",
-    range: () => {
-      const to = endOfToday();
-      const from = startOfDay(subMonths(to, 2));
-      return { from, to };
+    {
+      label: "Last 2 months",
+      range: () => {
+        const to = endOfToday();
+        const from = startOfDay(subMonths(to, 2));
+        return { from, to };
+      },
     },
-  },
-  {
-    label: "Last 3 months",
-    range: () => {
-      const to = endOfToday();
-      const from = startOfDay(subMonths(to, 3));
-      return { from, to };
+    {
+      label: "Last 3 months",
+      range: () => {
+        const to = endOfToday();
+        const from = startOfDay(subMonths(to, 3));
+        return { from, to };
+      },
     },
-  },
-];
+  ];
 
 export function DashboardShell({ displayName, currency }: DashboardShellProps) {
   const router = useRouter();
@@ -180,22 +184,21 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
-  const initialRange: DateRange | undefined = filters.from || filters.to
-    ? {
-        from: filters.from ? new Date(filters.from) : undefined,
-        to: filters.to ? new Date(filters.to) : undefined,
-      }
-    : undefined;
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(initialRange);
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+
   const [selectedCurrency, setSelectedCurrency] = useState<SupportedCurrency>(currency);
   const [isUpdatingCurrency, setIsUpdatingCurrency] = useState(false);
   const [isCustomExportOpen, setIsCustomExportOpen] = useState(false);
   const [customExportRange, setCustomExportRange] = useState<DateRange | undefined>();
 
   useEffect(() => {
-    void fetchExpenses();
-  }, [fetchExpenses]);
+    const start = startOfMonth(currentMonth);
+    const end = endOfMonth(currentMonth);
+    setFilters({
+      from: start.toISOString(),
+      to: end.toISOString(),
+    });
+  }, [currentMonth, setFilters]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -226,13 +229,7 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
     await setFilters(partial);
   };
 
-  const handleDateRangeChange = async (range?: DateRange) => {
-    setDateRange(range);
-    await setFilters({
-      from: range?.from ? range.from.toISOString() : undefined,
-      to: range?.to ? range.to.toISOString() : undefined,
-    });
-  };
+
 
   const handleExport = async (range?: { from?: Date; to?: Date }) => {
     const params = new URLSearchParams();
@@ -410,269 +407,268 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
 
       <main className="flex-1 py-8">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4">
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard
-              title="Total Income"
-              value={formatSummaryValue(summary.income)}
-              subtitle="For the active filters"
-            />
-            <SummaryCard
-              title="Total Expenses"
-              value={formatSummaryValue(summary.expense)}
-              subtitle="For the active filters"
-            />
-            <SummaryCard
-              title="Net Balance"
-              value={formatSummaryValue(summary.net)}
-              subtitle="Income minus expenses"
-            />
-            <Card className="shadow-sm">
-              <CardHeader className="space-y-1">
-                <CardDescription>Active filters</CardDescription>
-                <CardTitle className="text-3xl font-semibold tracking-tight">
-                  {filters.category || filters.type || filters.from || filters.to
-                    ? "Custom view"
-                    : "All data"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2 text-xs">
-                {filters.type ? <Badge variant="outline">Type: {filters.type}</Badge> : null}
-                {filters.category ? (
-                  <Badge variant="outline">Category: {filters.category}</Badge>
-                ) : null}
-                {filters.from ? (
-                  <Badge variant="outline">From: {format(new Date(filters.from), "MMM d, yyyy")}</Badge>
-                ) : null}
-                {filters.to ? (
-                  <Badge variant="outline">To: {format(new Date(filters.to), "MMM d, yyyy")}</Badge>
-                ) : null}
-              </CardContent>
-              <CardFooter>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    setDateRange(undefined);
-                    await resetFilters();
-                  }}
-                  disabled={isLoading}
-                >
-                  Clear filters
-                </Button>
-              </CardFooter>
-            </Card>
-          </section>
-
-          <section className="grid gap-4 rounded-xl border bg-card p-6 shadow-sm">
-            <header className="flex flex-wrap items-center gap-3">
-              <Badge variant="outline" className="px-3 py-1 text-xs uppercase">
-                <Filter className="mr-2 h-3 w-3" /> Filters
-              </Badge>
-
-              <Select
-                value={activeType}
-                onValueChange={async (value) => {
-                  await handleFilterChange({
-                    type: value === "ALL" ? undefined : (value as TransactionType),
-                  });
-                }}
-              >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Transaction type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {typeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={filters.category ?? "ALL"}
-                onValueChange={async (value) => {
-                  await handleFilterChange({ category: value === "ALL" ? undefined : value });
-                }}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[240px] justify-start">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange?.from || dateRange?.to ? (
-                      <span>
-                        {dateRange?.from ? format(dateRange.from, "MMM d, yyyy") : "--"} –
-                        {" "}
-                        {dateRange?.to ? format(dateRange.to, "MMM d, yyyy") : "--"}
-                      </span>
-                    ) : (
-                      <span>Select date range</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    selected={dateRange}
-                    onSelect={(range) => void handleDateRangeChange(range ?? undefined)}
-                    numberOfMonths={2}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </header>
-
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-            <TransactionsTable
-              expenses={expenses}
-              onEdit={openEdit}
-              onDelete={openDelete}
-              formatAmount={formatAmount}
-            />
-
-            <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
-              <p className="text-xs text-muted-foreground">
-                Showing {(page - 1) * pageSize + 1} –
-                {Math.min(page * pageSize, totalCount)} of {totalCount} transactions
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    if (page > 1) await setPage(page - 1);
-                  }}
-                  disabled={page === 1 || isLoading}
-                >
-                  Previous
-                </Button>
-                <span className="text-sm">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    if (page < totalPages) await setPage(page + 1);
-                  }}
-                  disabled={page === totalPages || isLoading}
-                >
-                  Next
-                </Button>
-                <Select
-                  value={String(pageSize)}
-                  onValueChange={async (value) => {
-                    await setPageSize(Number(value));
-                  }}
-                >
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Rows" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[10, 20, 50].map((size) => (
-                      <SelectItem key={size} value={String(size)}>
-                        {size} / page
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </section>
-
-          <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-            <Card className="min-h-[320px]">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <div>
-                  <CardTitle className="text-lg">Spending Trends</CardTitle>
-                  <CardDescription>Last 6 months</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <ExpenseTrendChart
-                  data={trend}
-                  isLoading={isLoading}
-                  formatCurrency={(value) => formatCurrencyValue(value, selectedCurrency)}
+          <Tabs defaultValue="overview" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="space-y-4">
+              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <SummaryCard
+                  title="Total Income"
+                  value={formatSummaryValue(summary.income)}
+                  subtitle="For the active filters"
                 />
-              </CardContent>
-            </Card>
-            <Card className="min-h-[320px]">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <div>
-                  <CardTitle className="text-lg">Category Breakdown</CardTitle>
-                  <CardDescription>This period</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <CategoryBreakdownChart
-                  data={categoryBreakdown}
-                  isLoading={isLoading}
-                  formatCurrency={(value) => formatCurrencyValue(value, selectedCurrency)}
+                <SummaryCard
+                  title="Total Expenses"
+                  value={formatSummaryValue(summary.expense)}
+                  subtitle="For the active filters"
                 />
-              </CardContent>
-            </Card>
-          </section>
-
-          <Card>
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-lg">Recent Transactions</CardTitle>
-                <CardDescription>
-                  {recent.length === 0
-                    ? "Add transactions to start tracking your spending."
-                    : "Your latest activity appears here."}
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <Separator />
-            <CardContent className="space-y-4">
-              {isLoading ? (
-                <p className="text-sm text-muted-foreground">Loading your transactions…</p>
-              ) : recent.length > 0 ? (
-                <ul className="space-y-3">
-                  {recent.map((transaction) => (
-                    <li
-                      key={transaction.id}
-                      className="flex items-center justify-between rounded-lg border border-transparent bg-muted/40 px-4 py-3 shadow-sm transition-colors hover:border-border hover:bg-background"
+                <SummaryCard
+                  title="Total Savings"
+                  value={formatSummaryValue(summary.savings)}
+                  subtitle="For the active filters"
+                />
+                <SummaryCard
+                  title="Net Balance"
+                  value={formatSummaryValue(summary.net)}
+                  subtitle="Income - Expenses - Savings"
+                />
+                <Card className="shadow-sm">
+                  <CardHeader className="space-y-1">
+                    <CardDescription>Active filters</CardDescription>
+                    <CardTitle className="text-3xl font-semibold tracking-tight">
+                      {filters.category || filters.type || filters.from || filters.to
+                        ? "Custom view"
+                        : "All data"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap gap-2 text-xs">
+                    {filters.type ? <Badge variant="outline">Type: {filters.type}</Badge> : null}
+                    {filters.category ? (
+                      <Badge variant="outline">Category: {filters.category}</Badge>
+                    ) : null}
+                    {filters.from ? (
+                      <Badge variant="outline">From: {format(new Date(filters.from), "MMM d, yyyy")}</Badge>
+                    ) : null}
+                    {filters.to ? (
+                      <Badge variant="outline">To: {format(new Date(filters.to), "MMM d, yyyy")}</Badge>
+                    ) : null}
+                  </CardContent>
+                  <CardFooter>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const now = new Date();
+                        setCurrentMonth(now);
+                        await resetFilters();
+                        const start = startOfMonth(now);
+                        const end = endOfMonth(now);
+                        await setFilters({ from: start.toISOString(), to: end.toISOString() });
+                      }}
+                      disabled={isLoading}
                     >
-                      <div className="flex flex-col">
-                        <span className="font-medium">{transaction.title}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(transaction.date), "MMM d, yyyy")} · {transaction.category}
-                        </span>
-                      </div>
-                      <span
-                        className={cn(
-                          "text-sm font-semibold",
-                          transaction.type === "INCOME" ? "text-emerald-600" : "text-rose-500",
-                        )}
-                      >
-                        {formatAmount(transaction.amount, transaction.type)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/40 p-10 text-center text-sm text-muted-foreground">
-                  You don&apos;t have any transactions yet. Add your first income or expense to see it here.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                      Clear filters
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </section>
+
+              <section className="grid gap-4 rounded-xl border bg-card p-6 shadow-sm">
+                <header className="flex flex-wrap items-center gap-3">
+                  <Badge variant="outline" className="px-3 py-1 text-xs uppercase">
+                    <Filter className="mr-2 h-3 w-3" /> Filters
+                  </Badge>
+
+                  <Select
+                    value={activeType}
+                    onValueChange={async (value) => {
+                      await handleFilterChange({
+                        type: value === "ALL" ? undefined : (value as TransactionType),
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="Transaction type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {typeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={filters.category ?? "ALL"}
+                    onValueChange={async (value) => {
+                      await handleFilterChange({ category: value === "ALL" ? undefined : value });
+                    }}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All categories</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <MonthSelector
+                    currentMonth={currentMonth}
+                    onMonthChange={setCurrentMonth}
+                  />
+                </header>
+
+                {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+                <TransactionsTable
+                  expenses={expenses}
+                  onEdit={openEdit}
+                  onDelete={openDelete}
+                  formatAmount={formatAmount}
+                />
+
+                <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
+                  <p className="text-xs text-muted-foreground">
+                    Showing {(page - 1) * pageSize + 1} –
+                    {Math.min(page * pageSize, totalCount)} of {totalCount} transactions
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        if (page > 1) await setPage(page - 1);
+                      }}
+                      disabled={page === 1 || isLoading}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm">
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        if (page < totalPages) await setPage(page + 1);
+                      }}
+                      disabled={page === totalPages || isLoading}
+                    >
+                      Next
+                    </Button>
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={async (value) => {
+                        await setPageSize(Number(value));
+                      }}
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Rows" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[10, 20, 50].map((size) => (
+                          <SelectItem key={size} value={String(size)}>
+                            {size} / page
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </section>
+
+              <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+                <Card className="min-h-[320px]">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <div>
+                      <CardTitle className="text-lg">Spending Trends</CardTitle>
+                      <CardDescription>Last 6 months</CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <ExpenseTrendChart
+                      data={trend}
+                      isLoading={isLoading}
+                      formatCurrency={(value) => formatCurrencyValue(value, selectedCurrency)}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="min-h-[320px]">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <div>
+                      <CardTitle className="text-lg">Category Breakdown</CardTitle>
+                      <CardDescription>This period</CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <CategoryBreakdownChart
+                      data={categoryBreakdown}
+                      isLoading={isLoading}
+                      formatCurrency={(value) => formatCurrencyValue(value, selectedCurrency)}
+                    />
+                  </CardContent>
+                </Card>
+              </section>
+
+              <Card>
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="text-lg">Recent Transactions</CardTitle>
+                    <CardDescription>
+                      {recent.length === 0
+                        ? "Add transactions to start tracking your spending."
+                        : "Your latest activity appears here."}
+                    </CardDescription>
+                  </div>
+                </CardHeader>
+                <Separator />
+                <CardContent className="space-y-4">
+                  {isLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading your transactions…</p>
+                  ) : recent.length > 0 ? (
+                    <ul className="space-y-3">
+                      {recent.map((transaction) => (
+                        <li
+                          key={transaction.id}
+                          className="flex items-center justify-between rounded-lg border border-transparent bg-muted/40 px-4 py-3 shadow-sm transition-colors hover:border-border hover:bg-background"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">{transaction.title}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(transaction.date), "MMM d, yyyy")} · {transaction.category}
+                            </span>
+                          </div>
+                          <span
+                            className={cn(
+                              "text-sm font-semibold",
+                              transaction.type === "INCOME" ? "text-emerald-600" : "text-rose-500",
+                            )}
+                          >
+                            {formatAmount(transaction.amount, transaction.type)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/40 p-10 text-center text-sm text-muted-foreground">
+                      You don&apos;t have any transactions yet. Add your first income or expense to see it here.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="analytics" className="space-y-4">
+              <AnalyticsDashboard filters={filters} currency={selectedCurrency} />
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
 
