@@ -146,6 +146,8 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
     summary,
     trend,
     categoryBreakdown,
+    savingsByLocation,
+    allCategories,
     totalCount,
     page,
     pageSize,
@@ -165,6 +167,8 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
       summary: state.summary,
       trend: state.trend,
       categoryBreakdown: state.categoryBreakdown,
+      savingsByLocation: state.savingsByLocation,
+      allCategories: state.allCategories,
       totalCount: state.totalCount,
       page: state.page,
       pageSize: state.pageSize,
@@ -203,11 +207,8 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const categories = useMemo(() => {
-    const unique = new Set<string>();
-    categoryBreakdown.forEach((slice) => unique.add(slice.name));
-    expenses.forEach((expense) => unique.add(expense.category));
-    return Array.from(unique).filter(Boolean).sort();
-  }, [categoryBreakdown, expenses]);
+    return allCategories.length > 0 ? allCategories : [];
+  }, [allCategories]);
 
   const formatAmount = useMemo(
     () => (amount: number, type: TransactionType) => {

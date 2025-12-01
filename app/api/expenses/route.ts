@@ -182,6 +182,20 @@ export async function GET(request: Request) {
 
   const savingsByLocation = Array.from(savingsTotals.entries()).map(([location, value]) => ({ location, value }));
 
+  // Fetch all unique categories from user's history (not filtered by date)
+  const allExpenses = await prisma.expense.findMany({
+    where: { userId: session.user.id },
+    select: { category: true },
+  });
+
+  const allCategoriesSet = new Set<string>();
+  allExpenses.forEach((expense) => {
+    const cat = expense.category?.trim();
+    if (cat) allCategoriesSet.add(cat);
+  });
+
+  const allCategories = Array.from(allCategoriesSet).sort();
+
   return NextResponse.json({
     data: pagedExpenses,
     meta: {
@@ -194,6 +208,7 @@ export async function GET(request: Request) {
     categoryBreakdown,
     savingsByLocation,
     recent,
+    allCategories,
   });
 }
 

@@ -60,6 +60,7 @@ type ExpenseState = {
   trend: TrendPoint[];
   categoryBreakdown: CategorySlice[];
   savingsByLocation: SavingsLocation[];
+  allCategories: string[];
   totalCount: number;
   page: number;
   pageSize: number;
@@ -118,6 +119,7 @@ export const useExpenseStore = create<ExpenseState>()(
         trend: [],
         categoryBreakdown: [],
         savingsByLocation: [],
+        allCategories: [],
         totalCount: 0,
         page: 1,
         pageSize: 10,
@@ -162,6 +164,7 @@ export const useExpenseStore = create<ExpenseState>()(
               trend: payload?.trend ?? [],
               categoryBreakdown: payload?.categoryBreakdown ?? [],
               savingsByLocation: payload?.savingsByLocation ?? [],
+              allCategories: payload?.allCategories ?? [],
               totalCount: payload?.meta?.totalCount ?? 0,
               page: payload?.meta?.page ?? get().page,
               pageSize: payload?.meta?.pageSize ?? get().pageSize,
