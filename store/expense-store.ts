@@ -34,6 +34,7 @@ export type ExpenseSummary = {
   income: number;
   expense: number;
   savings: number;
+  received: number;
   net: number;
 };
 
@@ -115,7 +116,7 @@ export const useExpenseStore = create<ExpenseState>()(
       (set, get) => ({
         expenses: [],
         recent: [],
-        summary: { income: 0, expense: 0, savings: 0, net: 0 },
+        summary: { income: 0, expense: 0, savings: 0, received: 0, net: 0 },
         trend: [],
         categoryBreakdown: [],
         savingsByLocation: [],
@@ -160,7 +161,7 @@ export const useExpenseStore = create<ExpenseState>()(
             set({
               expenses: payload?.data ?? [],
               recent: payload?.recent ?? [],
-              summary: payload?.summary ?? { income: 0, expense: 0, savings: 0, net: 0 },
+              summary: payload?.summary ?? { income: 0, expense: 0, savings: 0, received: 0, net: 0 },
               trend: payload?.trend ?? [],
               categoryBreakdown: payload?.categoryBreakdown ?? [],
               savingsByLocation: payload?.savingsByLocation ?? [],

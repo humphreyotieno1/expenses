@@ -77,7 +77,7 @@ export async function GET(request: Request) {
   const monthlyTrendData = await prisma.$queryRaw`
     SELECT 
       DATE_TRUNC('month', date) as month,
-      SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END) as income,
+      SUM(CASE WHEN type = 'INCOME' OR type = 'RECEIVED' THEN amount ELSE 0 END) as income,
       SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END) as expense
     FROM "Expense"
     WHERE "userId" = ${session.user.id}

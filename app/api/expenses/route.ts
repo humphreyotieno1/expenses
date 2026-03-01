@@ -11,7 +11,7 @@ function parseTypeParam(value: string | null): TransactionType | undefined {
   if (!value) return undefined;
 
   const normalized = value.toUpperCase();
-  if (normalized === "INCOME" || normalized === "EXPENSE" || normalized === "SAVINGS") {
+  if (normalized === "INCOME" || normalized === "EXPENSE" || normalized === "SAVINGS" || normalized === "RECEIVED") {
     return normalized as TransactionType;
   }
 
@@ -117,11 +117,13 @@ export async function GET(request: Request) {
         acc.expense += amount;
       } else if (expense.type === "SAVINGS") {
         acc.savings += amount;
+      } else if (expense.type === "RECEIVED") {
+        acc.received += amount;
       }
-      acc.net = acc.income - acc.expense - acc.savings;
+      acc.net = acc.income + acc.received - acc.expense - acc.savings;
       return acc;
     },
-    { income: 0, expense: 0, savings: 0, net: 0 },
+    { income: 0, expense: 0, savings: 0, received: 0, net: 0 },
   );
 
   const trendMap = new Map<string, { label: string; income: number; expense: number; order: number }>();
@@ -150,11 +152,10 @@ export async function GET(request: Request) {
       entry.income += Number(expense.amount);
     } else if (expense.type === "EXPENSE") {
       entry.expense += Number(expense.amount);
+    } else if (expense.type === "RECEIVED") {
+      // Received money is grouped with income in the trend chart (money in)
+      entry.income += Number(expense.amount);
     }
-    // Savings are not included in income/expense trend for now, or should they?
-    // The chart usually shows Income vs Expense. Savings is a separate category.
-    // If we want to show savings in trend, we'd need to update the chart component too.
-    // For now, let's keep it as Income vs Expense.
   });
 
   const sortedTrend = Array.from(trendMap.values()).sort((a, b) => a.order - b.order);

@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-export type TransactionType = "INCOME" | "EXPENSE" | "SAVINGS";
+export type TransactionType = "INCOME" | "EXPENSE" | "SAVINGS" | "RECEIVED";
 
-const transactionTypeValues = ["income", "expense", "savings", "INCOME", "EXPENSE", "SAVINGS"] as const;
+const transactionTypeValues = ["income", "expense", "savings", "received", "INCOME", "EXPENSE", "SAVINGS", "RECEIVED"] as const;
 
 const transactionTypeSchema = z
   .enum(transactionTypeValues)

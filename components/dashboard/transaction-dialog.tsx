@@ -52,7 +52,7 @@ const transactionSchema = z.object({
     .number()
     .refine((num) => Number.isFinite(num), "Amount must be valid.")
     .refine((num) => num >= 0, "Amount cannot be negative."),
-  type: z.enum(["INCOME", "EXPENSE", "SAVINGS"] as const satisfies readonly TransactionType[]),
+  type: z.enum(["INCOME", "EXPENSE", "SAVINGS", "RECEIVED"] as const satisfies readonly TransactionType[]),
   category: z.string().min(1, "Category is required."),
   date: z.coerce.date(),
   notes: z
@@ -172,7 +172,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
           <DialogTitle>{mode === "create" ? "Add transaction" : "Edit transaction"}</DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Capture a new income, expense, or savings entry."
+              ? "Capture a new income, expense, savings, or received entry."
               : "Update the details for this transaction."}
           </DialogDescription>
         </DialogHeader>
@@ -239,6 +239,7 @@ export function TransactionDialog({ open, mode, expense, categories, defaultCate
                           <SelectItem value="INCOME">Income</SelectItem>
                           <SelectItem value="EXPENSE">Expense</SelectItem>
                           <SelectItem value="SAVINGS">Savings</SelectItem>
+                          <SelectItem value="RECEIVED">Received</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>

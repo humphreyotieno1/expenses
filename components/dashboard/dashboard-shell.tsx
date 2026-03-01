@@ -69,6 +69,7 @@ const typeOptions: Array<{ label: string; value: TransactionType | "ALL" }> = [
   { label: "Income", value: "INCOME" },
   { label: "Expense", value: "EXPENSE" },
   { label: "Savings", value: "SAVINGS" },
+  { label: "Received", value: "RECEIVED" },
 ];
 
 type DashboardShellProps = {
@@ -216,6 +217,24 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
       return type === "EXPENSE" ? `-${formatted}` : `+${formatted}`;
     },
     [selectedCurrency],
+  );
+
+  const getTypeColor = useMemo(
+    () => (type: TransactionType) => {
+      switch (type) {
+        case "INCOME":
+          return "text-emerald-600";
+        case "RECEIVED":
+          return "text-teal-500";
+        case "EXPENSE":
+          return "text-rose-500";
+        case "SAVINGS":
+          return "text-blue-500";
+        default:
+          return "text-muted-foreground";
+      }
+    },
+    [],
   );
 
   const formatSummaryValue = useMemo(
@@ -431,9 +450,14 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
                   subtitle="For the active filters"
                 />
                 <SummaryCard
+                  title="Total Received"
+                  value={formatSummaryValue(summary.received)}
+                  subtitle="Gifts, refunds, family & more"
+                />
+                <SummaryCard
                   title="Net Balance"
                   value={formatSummaryValue(summary.net)}
-                  subtitle="Income - Expenses - Savings"
+                  subtitle="Income + Received - Expenses - Savings"
                 />
                 <Card className="shadow-sm">
                   <CardHeader className="space-y-1">
@@ -650,7 +674,7 @@ export function DashboardShell({ displayName, currency }: DashboardShellProps) {
                           <span
                             className={cn(
                               "text-sm font-semibold",
-                              transaction.type === "INCOME" ? "text-emerald-600" : "text-rose-500",
+                              getTypeColor(transaction.type),
                             )}
                           >
                             {formatAmount(transaction.amount, transaction.type)}

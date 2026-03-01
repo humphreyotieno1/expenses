@@ -54,8 +54,16 @@ export function TransactionsTable({ expenses, onEdit, onDelete, formatAmount }: 
                   <Badge variant="secondary">{expense.category}</Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={expense.type === "INCOME" ? "default" : "destructive"}>
-                    {expense.type === "INCOME" ? "Income" : "Expense"}
+                  <Badge variant={
+                    expense.type === "INCOME" ? "default" :
+                      expense.type === "RECEIVED" ? "outline" :
+                        expense.type === "SAVINGS" ? "secondary" :
+                          "destructive"
+                  }>
+                    {expense.type === "INCOME" ? "Income" :
+                      expense.type === "RECEIVED" ? "Received" :
+                        expense.type === "SAVINGS" ? "Savings" :
+                          "Expense"}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right font-semibold">

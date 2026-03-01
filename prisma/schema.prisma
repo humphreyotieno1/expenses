@@ -49,6 +49,7 @@ enum TransactionType {
   INCOME
   EXPENSE
   SAVINGS
+  RECEIVED
 }
 
 enum Currency {
