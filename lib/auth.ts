@@ -135,6 +135,7 @@ export const authOptions: NextAuthOptions = {
       console.error("[NextAuth][error]", code, metadata);
     },
   },
-  debug: process.env.NODE_ENV === "development",
+  // Enable with NEXTAUTH_DEBUG=true when you need verbose auth logs.
+  debug: process.env.NEXTAUTH_DEBUG === "true",
 };
 
